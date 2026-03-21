@@ -42,7 +42,10 @@ This project is pre-configured for easy deployment to GitHub Pages.
    npm run deploy
    ```
 
-2. **Enable Pages**: Go to your repository settings on GitHub under **Settings > Pages** and ensure the source is set to the `gh-pages` branch.
+2. **Enable Pages**: Go to your repository settings on GitHub under **Settings > Pages**.
+   - **Source**: Select **Deploy from a branch**.
+   - **Branch**: Select `gh-pages` and the `/ (root)` folder.
+   - Click **Save**.
 
 ## 🛠️ Built With
 

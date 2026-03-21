@@ -1,0 +1,5 @@
+{
+  "name": "Pickup Soccer Table Generator",
+  "description": "A simple tool to manage 4-team pickup soccer tournaments, track scores, and share the final league table.",
+  "requestFramePermissions": []
+}

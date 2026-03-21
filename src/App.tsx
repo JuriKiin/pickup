@@ -403,29 +403,6 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 shadow-sm">
-                <div className="flex items-center gap-2 mb-4">
-                  <Palette size={18} className="text-gray-400" />
-                  <h2 className="text-lg font-bold">Choose Theme</h2>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  {(Object.keys(THEMES) as ThemeColor[]).map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setTheme(t)}
-                      className={cn(
-                        "w-12 h-12 rounded-full border-4 transition-all flex items-center justify-center",
-                        THEMES[t].primary,
-                        theme === t ? "border-gray-900 dark:border-white scale-110" : "border-transparent opacity-60 hover:opacity-100"
-                      )}
-                      title={THEMES[t].name}
-                    >
-                      {theme === t && <CheckCircle2 size={20} className={THEMES[t].text} />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <button
                 onClick={() => setStep('matches')}
                 className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 dark:hover:bg-gray-100 transition-all active:scale-[0.98]"
@@ -523,6 +500,36 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               className="space-y-6"
             >
+              <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Palette size={18} className="text-gray-400" />
+                    <h2 className="text-lg font-bold">Match Winner's Theme</h2>
+                  </div>
+                  {tableData[0].played > 0 && (
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded-lg">
+                      Winner: {tableData[0].teamName}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {(Object.keys(THEMES) as ThemeColor[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTheme(t)}
+                      className={cn(
+                        "w-12 h-12 rounded-full border-4 transition-all flex items-center justify-center",
+                        THEMES[t].primary,
+                        theme === t ? "border-gray-900 dark:border-white scale-110" : "border-transparent opacity-60 hover:opacity-100"
+                      )}
+                      title={THEMES[t].name}
+                    >
+                      {theme === t && <CheckCircle2 size={20} className={THEMES[t].text} />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div 
                 ref={tableRef}
                 className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-xl"

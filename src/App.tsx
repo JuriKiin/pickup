@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Trophy, Share2, RotateCcw, Save, Users, Calendar, ChevronRight, CheckCircle2, Palette, Moon, Sun, MapPin } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { clsx, type ClassValue } from 'clsx';
@@ -11,10 +11,10 @@ function cn(...inputs: ClassValue[]) {
 }
 
 const INITIAL_TEAMS: Team[] = [
-  { id: '1', name: 'Team A' },
-  { id: '2', name: 'Team B' },
-  { id: '3', name: 'Team C' },
-  { id: '4', name: 'Team D' },
+  { id: '1', name: 'Team A', color: 'black' },
+  { id: '2', name: 'Team B', color: 'red' },
+  { id: '3', name: 'Team C', color: 'blue' },
+  { id: '4', name: 'Team D', color: 'green' },
 ];
 
 const THEMES: Record<ThemeColor, { name: string; primary: string; secondary: string; accent: string; bg: string; shadow: string; text: string }> = {
@@ -124,6 +124,10 @@ export default function App() {
     return (saved && THEMES[saved]) ? saved : 'black';
   });
 
+  const [isThemeManual, setIsThemeManual] = useState<boolean>(() => {
+    return localStorage.getItem('soccer-theme-manual') === 'true';
+  });
+
   const [eventName, setEventName] = useState<string>(() => {
     const saved = localStorage.getItem('soccer-event-name');
     return saved || GET_DEFAULT_EVENT_NAME();
@@ -137,12 +141,15 @@ export default function App() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const tableRef = useRef<HTMLDivElement>(null);
+  const standingsRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     localStorage.setItem('soccer-teams', JSON.stringify(teams));
     localStorage.setItem('soccer-matches', JSON.stringify(matches));
     localStorage.setItem('soccer-step', step);
     localStorage.setItem('soccer-theme', theme);
+    localStorage.setItem('soccer-theme-manual', String(isThemeManual));
     localStorage.setItem('soccer-event-name', eventName);
     localStorage.setItem('soccer-location', location);
   }, [teams, matches, step, theme, eventName, location]);
@@ -203,25 +210,36 @@ export default function App() {
     });
   }, [teams, matches]);
 
+  useEffect(() => {
+    if (!isThemeManual && tableData[0].played > 0) {
+      const winner = teams.find(t => t.id === tableData[0].teamId);
+      if (winner && winner.color !== theme) {
+        setTheme(winner.color);
+      }
+    }
+  }, [tableData, isThemeManual, teams, theme]);
+
   const handleReset = () => {
     setTeams(INITIAL_TEAMS);
     setMatches(GENERATE_MATCHES(INITIAL_TEAMS));
     setEventName(GET_DEFAULT_EVENT_NAME());
     setLocation('');
+    setTheme('black');
+    setIsThemeManual(false);
     setStep('setup');
     setShowResetConfirm(false);
   };
 
-  const handleShare = async () => {
-    if (!tableRef.current) return;
+  const handleShare = async (ref: React.RefObject<HTMLDivElement | null>, filename: string) => {
+    if (!ref.current) return;
     try {
       const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const dataUrl = await toPng(tableRef.current, { 
+      const dataUrl = await toPng(ref.current, { 
         backgroundColor: isDark ? '#111827' : '#ffffff', 
         cacheBust: true,
       });
       const blob = await (await fetch(dataUrl)).blob();
-      const file = new File([blob], 'soccer-table.png', { type: 'image/png' });
+      const file = new File([blob], `${filename}.png`, { type: 'image/png' });
 
       if (navigator.share) {
         await navigator.share({
@@ -231,7 +249,7 @@ export default function App() {
         });
       } else {
         const link = document.createElement('a');
-        link.download = 'soccer-table.png';
+        link.download = `${filename}.png`;
         link.href = dataUrl;
         link.click();
       }
@@ -241,7 +259,8 @@ export default function App() {
   };
 
   const updateMatchScore = (matchId: string, team: 1 | 2, score: string) => {
-    const val = score === '' ? null : parseInt(score, 10);
+    const parsed = parseInt(score, 10);
+    const val = (score === '' || isNaN(parsed)) ? null : Math.max(0, parsed);
     setMatches(prev => prev.map(m => 
       m.id === matchId 
         ? { ...m, [team === 1 ? 'score1' : 'score2']: val } 
@@ -259,6 +278,10 @@ export default function App() {
 
   const updateTeamName = (id: string, name: string) => {
     setTeams(prev => prev.map(t => t.id === id ? { ...t, name } : t));
+  };
+
+  const updateTeamColor = (id: string, color: ThemeColor) => {
+    setTeams(prev => prev.map(t => t.id === id ? { ...t, color } : t));
   };
 
   const activeTheme = THEMES[theme] || THEMES.black;
@@ -385,17 +408,33 @@ export default function App() {
                   </div>
                 </div>
                 <h2 className="text-xl font-bold mb-4">Name Your Teams</h2>
-                <div className="grid gap-4">
+                <div className="grid gap-6">
                   {teams.map((team, idx) => (
-                    <div key={team.id} className="relative">
-                      <label className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1 block">
-                        Team {idx + 1}
-                      </label>
+                    <div key={team.id} className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-700 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                          Team {idx + 1}
+                        </label>
+                        <div className="flex gap-1.5">
+                          {(Object.keys(THEMES) as ThemeColor[]).map((c) => (
+                            <button
+                              key={c}
+                              onClick={() => updateTeamColor(team.id, c)}
+                              className={cn(
+                                "w-6 h-6 rounded-full border-2 transition-all",
+                                THEMES[c].primary,
+                                team.color === c ? "border-gray-900 dark:border-white scale-110" : "border-transparent opacity-40 hover:opacity-100"
+                              )}
+                              title={THEMES[c].name}
+                            />
+                          ))}
+                        </div>
+                      </div>
                       <input
                         type="text"
                         value={team.name}
                         onChange={(e) => updateTeamName(team.id, e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium text-gray-900 dark:text-white"
+                        className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-bold text-gray-900 dark:text-white"
                         placeholder={`Team ${idx + 1} Name`}
                       />
                     </div>
@@ -427,24 +466,35 @@ export default function App() {
                   return (
                     <div key={match.id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm">
                       <div className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">Match {idx + 1}</div>
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex-1 text-right">
-                          <div className="font-bold text-gray-900 dark:text-white mb-2 truncate">{t1?.name}</div>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 flex flex-col items-end">
+                          <div className="flex items-center gap-2 mb-2 w-full justify-end truncate">
+                            <div className={cn("w-2 h-2 rounded-full shrink-0", THEMES[t1?.color || 'black'].primary)} />
+                            <div className="font-bold text-gray-900 dark:text-white truncate">{t1?.name}</div>
+                          </div>
                           <input
                             type="number"
                             inputMode="numeric"
+                            min="0"
                             value={match.score1 ?? ''}
                             onChange={(e) => updateMatchScore(match.id, 1, e.target.value)}
                             className="w-16 h-16 text-center text-2xl font-black bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none text-gray-900 dark:text-white"
                             placeholder="-"
                           />
                         </div>
-                        <div className="text-gray-300 dark:text-gray-700 font-black text-xl">VS</div>
-                        <div className="flex-1 text-left">
-                          <div className="font-bold text-gray-900 dark:text-white mb-2 truncate">{t2?.name}</div>
+                        <div className="flex flex-col items-center">
+                          <div className="h-6 mb-2" />
+                          <div className="h-16 flex items-center text-gray-300 dark:text-gray-700 font-black text-xl">VS</div>
+                        </div>
+                        <div className="flex-1 flex flex-col items-start">
+                          <div className="flex items-center gap-2 mb-2 w-full justify-start truncate">
+                            <div className="font-bold text-gray-900 dark:text-white truncate">{t2?.name}</div>
+                            <div className={cn("w-2 h-2 rounded-full shrink-0", THEMES[t2?.color || 'black'].primary)} />
+                          </div>
                           <input
                             type="number"
                             inputMode="numeric"
+                            min="0"
                             value={match.score2 ?? ''}
                             onChange={(e) => updateMatchScore(match.id, 2, e.target.value)}
                             className="w-16 h-16 text-center text-2xl font-black bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none text-gray-900 dark:text-white"
@@ -516,7 +566,10 @@ export default function App() {
                   {(Object.keys(THEMES) as ThemeColor[]).map((t) => (
                     <button
                       key={t}
-                      onClick={() => setTheme(t)}
+                      onClick={() => {
+                        setTheme(t);
+                        setIsThemeManual(true);
+                      }}
                       className={cn(
                         "w-12 h-12 rounded-full border-4 transition-all flex items-center justify-center",
                         THEMES[t].primary,
@@ -527,6 +580,14 @@ export default function App() {
                       {theme === t && <CheckCircle2 size={20} className={THEMES[t].text} />}
                     </button>
                   ))}
+                  {isThemeManual && (
+                    <button
+                      onClick={() => setIsThemeManual(false)}
+                      className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-emerald-600 transition-colors"
+                    >
+                      Reset to Auto
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -534,60 +595,63 @@ export default function App() {
                 ref={tableRef}
                 className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-xl"
               >
-                <div className={cn("p-6 transition-colors duration-300", activeTheme.primary, activeTheme.text)}>
-                  <h2 className="text-2xl font-black tracking-tighter uppercase italic leading-tight">{eventName}</h2>
-                  {location && (
-                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80 mb-1 flex items-center gap-1">
-                      <MapPin size={10} /> {location}
-                    </p>
-                  )}
-                  <p className="opacity-70 text-[10px] font-black uppercase tracking-[0.3em] mt-1">Table Results</p>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
-                        <th className="px-4 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Pos</th>
-                        <th className="px-4 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Team</th>
-                        <th className="px-2 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">P</th>
-                        <th className="px-2 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">W</th>
-                        <th className="px-2 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">D</th>
-                        <th className="px-2 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">L</th>
-                        <th className="px-2 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">GD</th>
-                        <th className="px-4 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">Pts</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tableData.map((row, idx) => (
-                        <tr 
-                          key={row.teamId} 
-                          className={cn(
-                            "border-b border-gray-50 dark:border-gray-800 last:border-0 transition-colors",
-                            idx === 0 ? "bg-emerald-50/30 dark:bg-emerald-900/10" : "hover:bg-gray-50/50 dark:hover:bg-gray-800/30"
-                          )}
-                        >
-                          <td className="px-4 py-5 font-black text-gray-400 dark:text-gray-600 text-sm">{idx + 1}</td>
-                          <td className="px-4 py-5">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-gray-900 dark:text-white">{row.teamName}</span>
-                              {idx === 0 && row.played > 0 && <CheckCircle2 size={14} className={activeTheme.accent} />}
-                            </div>
-                          </td>
-                          <td className="px-2 py-5 text-center font-medium text-gray-500 dark:text-gray-400 text-sm">{row.played}</td>
-                          <td className="px-2 py-5 text-center font-medium text-gray-500 dark:text-gray-400 text-sm">{row.won}</td>
-                          <td className="px-2 py-5 text-center font-medium text-gray-500 dark:text-gray-400 text-sm">{row.drawn}</td>
-                          <td className="px-2 py-5 text-center font-medium text-gray-500 dark:text-gray-400 text-sm">{row.lost}</td>
-                          <td className="px-2 py-5 text-center font-bold text-gray-700 dark:text-gray-300 text-sm">
-                            {row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}
-                          </td>
-                          <td className={cn("px-4 py-5 text-center font-black text-lg", activeTheme.accent)}>{row.points}</td>
+                <div ref={standingsRef}>
+                  <div className={cn("p-6 transition-colors duration-300", activeTheme.primary, activeTheme.text)}>
+                    <h2 className="text-2xl font-black tracking-tighter uppercase italic leading-tight">{eventName}</h2>
+                    {location && (
+                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80 mb-1 flex items-center gap-1">
+                        <MapPin size={10} /> {location}
+                      </p>
+                    )}
+                    <p className="opacity-70 text-[10px] font-black uppercase tracking-[0.3em] mt-1">Standings</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
+                          <th className="px-4 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Pos</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Team</th>
+                          <th className="px-2 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">P</th>
+                          <th className="px-2 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">W</th>
+                          <th className="px-2 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">D</th>
+                          <th className="px-2 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">L</th>
+                          <th className="px-2 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">GD</th>
+                          <th className="px-4 py-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">Pts</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {tableData.map((row, idx) => (
+                          <tr 
+                            key={row.teamId} 
+                            className={cn(
+                              "border-b border-gray-50 dark:border-gray-800 last:border-0 transition-colors",
+                              idx === 0 ? "bg-emerald-50/30 dark:bg-emerald-900/10" : "hover:bg-gray-50/50 dark:hover:bg-gray-800/30"
+                            )}
+                          >
+                            <td className="px-4 py-5 font-black text-gray-400 dark:text-gray-600 text-sm">{idx + 1}</td>
+                            <td className="px-4 py-5">
+                              <div className="flex items-center gap-2">
+                                <div className={cn("w-3 h-3 rounded-full shrink-0", THEMES[teams.find(t => t.id === row.teamId)?.color || 'black'].primary)} />
+                                <span className="font-bold text-gray-900 dark:text-white">{row.teamName}</span>
+                                {idx === 0 && row.played > 0 && <CheckCircle2 size={14} className={activeTheme.accent} />}
+                              </div>
+                            </td>
+                            <td className="px-2 py-5 text-center font-medium text-gray-500 dark:text-gray-400 text-sm">{row.played}</td>
+                            <td className="px-2 py-5 text-center font-medium text-gray-500 dark:text-gray-400 text-sm">{row.won}</td>
+                            <td className="px-2 py-5 text-center font-medium text-gray-500 dark:text-gray-400 text-sm">{row.drawn}</td>
+                            <td className="px-2 py-5 text-center font-medium text-gray-500 dark:text-gray-400 text-sm">{row.lost}</td>
+                            <td className="px-2 py-5 text-center font-bold text-gray-700 dark:text-gray-300 text-sm">
+                              {row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}
+                            </td>
+                            <td className={cn("px-4 py-5 text-center font-black text-lg", activeTheme.accent)}>{row.points}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-                <div className="bg-gray-50 dark:bg-gray-800/30 p-6 border-t border-gray-100 dark:border-gray-800">
-                  <h3 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">Table Results</h3>
+                <div ref={resultsRef} className="bg-gray-50 dark:bg-gray-800/30 p-6 border-t border-gray-100 dark:border-gray-800">
+                  <h3 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">Match Results</h3>
                   <div className="grid grid-cols-1 gap-3">
                     {matches.map((m) => {
                       const t1 = teams.find(t => t.id === m.team1Id);
@@ -595,7 +659,10 @@ export default function App() {
                       return (
                         <div key={m.id} className="flex flex-col gap-2 p-4 rounded-2xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm">
                           <div className="flex items-center justify-between text-sm">
-                            <span className="flex-1 font-bold text-gray-900 dark:text-white truncate">{t1?.name}</span>
+                            <div className="flex-1 flex items-center gap-2 truncate">
+                              <div className={cn("w-2 h-2 rounded-full shrink-0", THEMES[t1?.color || 'black'].primary)} />
+                              <span className="font-bold text-gray-900 dark:text-white truncate">{t1?.name}</span>
+                            </div>
                             <div className="flex items-center gap-3 px-4 font-black text-gray-900 dark:text-white">
                               <span className={cn(m.score1 !== null && m.score2 !== null && m.score1 > m.score2 ? activeTheme.accent : "")}>
                                 {m.score1 ?? '-'}
@@ -605,7 +672,10 @@ export default function App() {
                                 {m.score2 ?? '-'}
                               </span>
                             </div>
-                            <span className="flex-1 text-right font-bold text-gray-900 dark:text-white truncate">{t2?.name}</span>
+                            <div className="flex-1 flex items-center justify-end gap-2 truncate">
+                              <span className="font-bold text-gray-900 dark:text-white truncate">{t2?.name}</span>
+                              <div className={cn("w-2 h-2 rounded-full shrink-0", THEMES[t2?.color || 'black'].primary)} />
+                            </div>
                           </div>
                           {(m.scorers1 || m.scorers2) && (
                             <div className="flex justify-between gap-4 mt-1 px-1">
@@ -628,18 +698,32 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => handleShare(standingsRef, 'soccer-standings')}
+                    className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
+                  >
+                    <Share2 size={14} /> Standings
+                  </button>
+                  <button
+                    onClick={() => handleShare(resultsRef, 'soccer-results')}
+                    className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
+                  >
+                    <Share2 size={14} /> Results
+                  </button>
+                </div>
                 <button
-                  onClick={() => setStep('matches')}
-                  className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
+                  onClick={() => handleShare(tableRef, 'soccer-full-report')}
+                  className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 dark:hover:bg-gray-100 shadow-xl shadow-gray-200 dark:shadow-none transition-all active:scale-[0.98]"
                 >
-                  Edit Scores
+                  <Share2 size={20} /> Share Full Report
                 </button>
                 <button
-                  onClick={handleShare}
-                  className="bg-gray-900 dark:bg-white text-white dark:text-gray-900 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 dark:hover:bg-gray-100 shadow-xl shadow-gray-200 dark:shadow-none transition-all active:scale-[0.98]"
+                  onClick={() => setStep('matches')}
+                  className="w-full bg-transparent text-gray-400 dark:text-gray-500 py-2 text-xs font-bold hover:text-gray-600 dark:hover:text-gray-300 transition-all"
                 >
-                  <Share2 size={20} /> Share Table
+                  Edit Scores
                 </button>
               </div>
             </motion.div>

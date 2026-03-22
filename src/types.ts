@@ -1,6 +1,7 @@
 export interface Team {
   id: string;
   name: string;
+  color: ThemeColor;
 }
 
 export interface Match {

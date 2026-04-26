@@ -2,6 +2,7 @@ export interface Team {
   id: string;
   name: string;
   color: ThemeColor;
+  squadSize: number;
 }
 
 export interface Match {
@@ -12,6 +13,7 @@ export interface Match {
   score2: number | null;
   scorers1?: string;
   scorers2?: string;
+  isCompleted?: boolean;
 }
 
 export interface TableRow {
@@ -24,10 +26,11 @@ export interface TableRow {
   goalsFor: number;
   goalsAgainst: number;
   goalDifference: number;
+  cleanSheets: number;
   points: number;
 }
 
-export type ThemeColor = 'black' | 'white' | 'red' | 'neon' | 'blue' | 'green';
+export type ThemeColor = 'black' | 'white' | 'red' | 'neon' | 'orange' | 'blue' | 'green' | 'yellow';
 
 export interface Theme {
   id: ThemeColor;
